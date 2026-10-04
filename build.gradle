@@ -1,0 +1,146 @@
+plugins {
+    id 'java'
+    id 'com.github.johnrengelman.shadow' version '8.1.1'
+}
+
+def serverDir = new File('D:/net.dunky/servers/proxy')
+
+allprojects {
+    apply plugin: 'java'
+
+    group = 'net.dunky'
+    version = '1.0-SNAPSHOT'
+
+    repositories {
+        mavenCentral()
+        maven {
+            name = 'minecraft-libraries'
+            url = 'https://libraries.minecraft.net/'
+        }
+    }
+
+    dependencies {
+        compileOnly 'org.projectlombok:lombok:1.18.48'
+        annotationProcessor 'org.projectlombok:lombok:1.18.48'
+        compileOnly 'org.jetbrains:annotations-java5:24.1.0'
+    }
+
+    java {
+        toolchain {
+            languageVersion = JavaLanguageVersion.of(21)
+        }
+    }
+
+    tasks.withType(JavaCompile).configureEach {
+        options.encoding = 'UTF-8'
+        options.release.set(17)
+    }
+}
+
+// Versão exibida pelo proxy e pelos módulos.
+def describe = project.version.toString()
+
+dependencies {
+    implementation platform('io.netty:netty-bom:4.2.18.Final')
+
+    implementation 'com.google.guava:guava:33.5.0-jre'
+    implementation 'com.google.code.gson:gson:2.13.2'
+    implementation 'org.yaml:snakeyaml:2.7'
+    implementation 'org.ow2.asm:asm-commons:9.10.1'
+    implementation 'org.jline:jline:4.4.6'
+    implementation 'org.slf4j:slf4j-api:2.0.20'
+    implementation 'com.mojang:brigadier:1.2.9'
+    implementation 'it.unimi.dsi:fastutil-core:8.5.19'
+    implementation 'net.sf.jopt-simple:jopt-simple:5.0.4'
+
+    implementation 'io.netty:netty-transport'
+    implementation 'io.netty:netty-transport-native-unix-common'
+    implementation 'io.netty:netty-codec'
+    implementation 'io.netty:netty-codec-haproxy'
+    implementation 'io.netty:netty-codec-http'
+    implementation 'io.netty:netty-handler'
+    implementation 'io.netty:netty-transport-native-epoll::linux-x86_64'
+    implementation 'io.netty:netty-transport-native-epoll::linux-aarch_64'
+    implementation 'io.netty:netty-transport-native-io_uring::linux-x86_64'
+    implementation 'io.netty:netty-transport-native-io_uring::linux-aarch_64'
+
+    // Usados pelo carregador de bibliotecas dos plugins.
+    implementation 'org.apache.maven:maven-resolver-provider:3.9.16'
+    implementation 'org.apache.maven.resolver:maven-resolver-connector-basic:1.9.27'
+    implementation 'org.apache.maven.resolver:maven-resolver-transport-http:1.9.27'
+
+    runtimeOnly 'com.mysql:mysql-connector-j:26.7.0'
+
+    testImplementation 'org.junit.jupiter:junit-jupiter:6.1.3'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher:6.1.3'
+    testCompileOnly 'org.projectlombok:lombok:1.18.48'
+    testAnnotationProcessor 'org.projectlombok:lombok:1.18.48'
+}
+
+shadowJar {
+    archiveFileName.set('DunkyProxy.jar')
+    if (serverDir.isAbsolute()) {
+        destinationDirectory.set(serverDir)
+    }
+    mergeServiceFiles()
+    manifest {
+        attributes(
+                'Main-Class': 'net.md_5.bungee.Bootstrap',
+                'Implementation-Version': describe,
+                'Specification-Version': new Date().format('yyyyMMdd'),
+                'Enable-Native-Access': 'ALL-UNNAMED',
+                'Multi-Release': 'true'
+        )
+    }
+    exclude 'META-INF/*.SF', 'META-INF/*.DSA', 'META-INF/*.RSA', '**/*.java'
+}
+
+jar {
+    enabled = false
+}
+
+tasks.named('build') {
+    dependsOn shadowJar
+}
+
+test {
+    useJUnitPlatform()
+}
+
+subprojects {
+    def moduleName = project.name.replace('-', '_')
+    def descriptions = [
+            'cmd-alert'     : 'Provides the alert and alertraw commands',
+            'cmd-find'      : 'Provides the find command',
+            'cmd-kick'      : 'Provides the gkick command',
+            'cmd-list'      : 'Provides the glist command',
+            'cmd-send'      : 'Provides the gsend command',
+            'cmd-server'    : 'Provides the server command',
+            'reconnect-yaml': 'Provides reconnect location functionality in locations.yml'
+    ]
+
+    dependencies {
+        compileOnly rootProject.sourceSets.main.output
+        compileOnly files(rootProject.sourceSets.main.compileClasspath)
+    }
+
+    jar {
+        archiveFileName.set("${moduleName}.jar")
+        if (serverDir.isAbsolute()) {
+            destinationDirectory.set(new File(serverDir, 'modules'))
+        }
+    }
+
+    processResources {
+        def tokens = [
+                project : [name: moduleName, description: descriptions[project.name]],
+                describe: describe,
+                module  : [author: 'neveshardd']
+        ]
+        inputs.property 'describe', describe
+        filteringCharset = 'UTF-8'
+        filesMatching('plugin.yml') {
+            expand(tokens)
+        }
+    }
+}

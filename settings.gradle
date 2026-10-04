@@ -1,0 +1,12 @@
+plugins {
+    // Baixa o JDK pedido no build.gradle quando nenhum instalado serve.
+    id 'org.gradle.toolchains.foojay-resolver-convention' version '0.8.0'
+}
+
+rootProject.name = 'DunkyProxy'
+
+// Módulos do proxy: cada um vira um jar na pasta modules do servidor.
+['cmd-alert', 'cmd-find', 'cmd-kick', 'cmd-list', 'cmd-send', 'cmd-server', 'reconnect-yaml'].each { name ->
+    include name
+    project(":${name}").projectDir = file("modules/${name}")
+}
