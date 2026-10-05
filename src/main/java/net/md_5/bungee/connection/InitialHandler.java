@@ -212,7 +212,10 @@ public class InitialHandler extends PacketHandler implements PendingConnection
         this.legacy = true;
         final boolean v1_5 = ping.isV1_5();
 
-        ServerInfo forced = AbstractReconnectHandler.getForcedHost( this );
+        // DunkyProxy: o motd de um servidor só aparece para quem entra por um endereço de forced_hosts; com
+        // force_default_server o que vale é o motd do listener.
+        String forcedHost = ( getVirtualHost() == null ) ? null : listener.getForcedHosts().get( getVirtualHost().getHostString() );
+        ServerInfo forced = ( forcedHost == null ) ? null : bungee.getServerInfo( forcedHost );
         final String motd = ( forced != null ) ? forced.getMotd() : listener.getMotd();
         final int protocol = bungee.getProtocolVersion();
 
@@ -289,7 +292,10 @@ public class InitialHandler extends PacketHandler implements PendingConnection
         Preconditions.checkState( thisState == State.STATUS, "Not expecting STATUS" );
         thisState = null; // don't accept multiple status requests and set state to ping in async event callback
 
-        ServerInfo forced = AbstractReconnectHandler.getForcedHost( this );
+        // DunkyProxy: o motd de um servidor só aparece para quem entra por um endereço de forced_hosts; com
+        // force_default_server o que vale é o motd do listener.
+        String forcedHost = ( getVirtualHost() == null ) ? null : listener.getForcedHosts().get( getVirtualHost().getHostString() );
+        ServerInfo forced = ( forcedHost == null ) ? null : bungee.getServerInfo( forcedHost );
         final String motd = ( forced != null ) ? forced.getMotd() : listener.getMotd();
         final int protocol = ( ProtocolConstants.SUPPORTED_VERSION_IDS.contains( handshake.getProtocolVersion() ) ) ? handshake.getProtocolVersion() : bungee.getProtocolVersion();
 
@@ -653,7 +659,12 @@ public class InitialHandler extends PacketHandler implements PendingConnection
         }
         if ( initialServer == null )
         {
-            initialServer = bungee.getServerInfo( listener.getDefaultServer() );
+            // DunkyProxy: entra no lobby que está no ar e mais vazio; sem nenhum, tenta o primeiro da lista mesmo.
+            initialServer = BungeeCord.getInstance().getFallback().next( listener, java.util.Collections.<String>emptyList() );
+            if ( initialServer == null )
+            {
+                initialServer = bungee.getServerInfo( listener.getDefaultServer() );
+            }
         }
 
         Callback<PostLoginEvent> complete = new Callback<PostLoginEvent>()

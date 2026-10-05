@@ -401,7 +401,7 @@ public class ServerConnector extends PacketHandler
         // TODO: Move this to the connected() method of DownstreamBridge
         target.addPlayer( user );
         user.getPendingConnects().remove( target );
-        user.setServerJoinQueue( null );
+        user.resetFallback();
         user.setDimensionChange( false );
 
         ServerInfo from = ( user.getServer() == null ) ? null : user.getServer().getInfo();
@@ -429,7 +429,8 @@ public class ServerConnector extends PacketHandler
         {
             kick.getMessage()
         }, def, ServerKickEvent.State.CONNECTING );
-        if ( event.getKickReason().toLowerCase( Locale.ROOT ).contains( "outdated" ) && def != null )
+        // DunkyProxy: quem está sem servidor (vindo de um que caiu) e é recusado por este tenta o próximo lobby.
+        if ( def != null && ( ( user.isDimensionChange() && BungeeCord.getInstance().getFallback().redirectsKick( event.getKickReason() ) ) || event.getKickReason().toLowerCase( Locale.ROOT ).contains( "outdated" ) ) )
         {
             // Pre cancel the event if we are going to try another server
             event.setCancelled( true );

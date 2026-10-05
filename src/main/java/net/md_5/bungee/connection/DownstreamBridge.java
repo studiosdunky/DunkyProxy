@@ -135,6 +135,9 @@ public class DownstreamBridge extends PacketHandler
             return;
         }
 
+        // DunkyProxy: o servidor caiu ou está reiniciando; ninguém é mandado para ele até voltar a responder.
+        net.md_5.bungee.BungeeCord.getInstance().getFallback().markOffline( server.getInfo() );
+
         ServerInfo def = con.updateAndGetNextServer( server.getInfo() );
         if ( def != null )
         {
@@ -661,13 +664,22 @@ public class DownstreamBridge extends PacketHandler
     public void handle(Kick kick) throws Exception
     {
         ServerInfo def = con.updateAndGetNextServer( server.getInfo() );
-        ServerKickEvent event = bungee.getPluginManager().callEvent( new ServerKickEvent( con, server.getInfo(), new BaseComponent[]
+        ServerKickEvent event = new ServerKickEvent( con, server.getInfo(), new BaseComponent[]
         {
             kick.getMessage()
-        }, def, ServerKickEvent.State.CONNECTED ) );
+        }, def, ServerKickEvent.State.CONNECTED );
+        // DunkyProxy: servidor fechando ou reiniciando expulsa todo mundo; em vez de sair da rede o jogador vai para
+        // um lobby (um plugin ainda pode mudar isso no evento). Punições continuam desconectando.
+        boolean redirect = def != null && net.md_5.bungee.BungeeCord.getInstance().getFallback().redirectsKick( event.getKickReason() );
+        event.setCancelled( redirect );
+        bungee.getPluginManager().callEvent( event );
         if ( event.isCancelled() && event.getCancelServer() != null )
         {
             con.connectNow( event.getCancelServer(), ServerConnectEvent.Reason.KICK_REDIRECT );
+            if ( redirect )
+            {
+                con.sendMessage( bungee.getTranslation( "server_kick_redirect", server.getInfo().getName(), event.getKickReason() ) );
+            }
         } else
         {
             con.disconnect( event.getKickReasonComponent() ); // TODO: Prefix our own stuff.

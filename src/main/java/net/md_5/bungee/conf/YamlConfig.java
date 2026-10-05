@@ -217,7 +217,7 @@ public class YamlConfig implements ConfigurationAdapter
             Map<String, Object> val = entry.getValue();
             String name = entry.getKey();
             String addr = get( "address", "localhost:25565", val );
-            String motd = ChatColor.translateAlternateColorCodes( '&', get( "motd", "&1Just another BungeeCord - Forced Host", val ) );
+            String motd = motd( get( "motd", (Object) "&1Just another BungeeCord - Forced Host", val ) );
             boolean restricted = get( "restricted", false, val );
             SocketAddress address = Util.getAddr( addr );
             ServerInfo info = ProxyServer.getInstance().constructServerInfo( name, address, motd, restricted );
@@ -225,6 +225,29 @@ public class YamlConfig implements ConfigurationAdapter
         }
 
         return ret;
+    }
+
+    /**
+     * DunkyProxy: o motd pode ser uma lista, uma linha por item (o Minecraft mostra duas), ou um texto só.
+     */
+    private static String motd(Object value)
+    {
+        StringBuilder motd = new StringBuilder();
+        if ( value instanceof Collection )
+        {
+            for ( Object line : (Collection<?>) value )
+            {
+                if ( motd.length() > 0 )
+                {
+                    motd.append( '\n' );
+                }
+                motd.append( line == null ? "" : line );
+            }
+        } else if ( value != null )
+        {
+            motd.append( value );
+        }
+        return ChatColor.translateAlternateColorCodes( '&', motd.toString() );
     }
 
     @Override
@@ -242,8 +265,7 @@ public class YamlConfig implements ConfigurationAdapter
 
         for ( Map<String, Object> val : base )
         {
-            String motd = get( "motd", "&1Another Bungee server", val );
-            motd = ChatColor.translateAlternateColorCodes( '&', motd );
+            String motd = motd( get( "motd", (Object) Arrays.asList( "&6&lDUNKY", "&7Linha 2" ), val ) );
 
             int maxPlayers = get( "max_players", 1, val );
             boolean forceDefault = get( "force_default_server", false, val );

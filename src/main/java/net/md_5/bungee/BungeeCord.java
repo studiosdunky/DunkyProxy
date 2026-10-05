@@ -104,6 +104,8 @@ public class BungeeCord extends ProxyServer
      */
     @Getter
     public final Configuration config = new Configuration();
+    @Getter
+    private final Fallback fallback = new Fallback( this );
     /**
      * Localization formats.
      */
@@ -306,6 +308,7 @@ public class BungeeCord extends ProxyServer
             connectionThrottle = new ConnectionThrottle( config.getThrottle(), config.getThrottleLimit() );
         }
         startListeners();
+        fallback.start();
 
         saveThread.scheduleAtFixedRate( new TimerTask()
         {
@@ -475,6 +478,7 @@ public class BungeeCord extends ProxyServer
         }
         saveThread.cancel();
         metricsThread.cancel();
+        fallback.stop();
 
         getLogger().info( "Disabling plugins" );
         for ( Plugin plugin : Lists.reverse( new ArrayList<>( pluginManager.getPlugins() ) ) )

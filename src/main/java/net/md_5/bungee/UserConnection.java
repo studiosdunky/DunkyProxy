@@ -13,7 +13,6 @@ import java.util.ArrayDeque;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -115,9 +114,8 @@ public final class UserConnection implements ProxiedPlayer
     private int gamemode;
     @Getter
     private int compressionThreshold = -1;
-    // Used for trying multiple servers in order
-    @Setter
-    private Queue<String> serverJoinQueue;
+    // DunkyProxy: servidores que acabaram de falhar para este jogador (nome e quando), para o fallback não insistir neles.
+    private final Map<String, Long> fallbackTried = new java.util.concurrent.ConcurrentHashMap<>();
     @Getter
     @Setter
     private boolean bundling;
@@ -297,28 +295,28 @@ public final class UserConnection implements ProxiedPlayer
     public void connectNow(ServerInfo target, ServerConnectEvent.Reason reason)
     {
         dimensionChange = true;
-        connect( target, reason );
+        // DunkyProxy: se este também não responder, tenta o próximo lobby em vez de desconectar.
+        connect( target, null, true, reason );
+    }
+
+    public void resetFallback()
+    {
+        // DunkyProxy: entrou em um servidor, a próxima queda começa do zero.
+        fallbackTried.clear();
     }
 
     public ServerInfo updateAndGetNextServer(ServerInfo currentTarget)
     {
-        if ( serverJoinQueue == null )
+        // DunkyProxy: um lobby que esteja no ar. O que falhou fica de fora por um tempo, e não para sempre, para o
+        // jogador poder ser levado ao lobby de novo na próxima vez que um servidor reiniciar.
+        long now = System.currentTimeMillis();
+        fallbackTried.values().removeIf( (time) -> now - time > 30000L );
+        if ( currentTarget != null )
         {
-            serverJoinQueue = new LinkedList<>( getPendingConnection().getListener().getServerPriority() );
+            fallbackTried.put( currentTarget.getName(), now );
         }
 
-        ServerInfo next = null;
-        while ( !serverJoinQueue.isEmpty() )
-        {
-            ServerInfo candidate = ProxyServer.getInstance().getServerInfo( serverJoinQueue.remove() );
-            if ( !Objects.equals( currentTarget, candidate ) )
-            {
-                next = candidate;
-                break;
-            }
-        }
-
-        return next;
+        return BungeeCord.getInstance().getFallback().next( getPendingConnection().getListener(), fallbackTried.keySet() );
     }
 
     public void connect(ServerInfo info, final Callback<Boolean> callback, final boolean retry)
