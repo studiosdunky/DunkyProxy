@@ -38,6 +38,12 @@ allprojects {
 }
 
 // Versão exibida pelo proxy e pelos módulos.
+ext.dunkySourceDirectories = allprojects.collect { new File(it.projectDir, 'src/main') }
+ext.dunkyTrackedFiles = allprojects.collect { new File(it.projectDir, 'build.gradle') }.findAll { it.isFile() }
+def versioning = file('../DunkyUpdater/versionamento.gradle')
+apply from: versioning.isFile() ? versioning : file('gradle/versionamento.gradle')
+allprojects { version = rootProject.version }
+
 def describe = project.version.toString()
 
 dependencies {

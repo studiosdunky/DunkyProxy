@@ -1,0 +1,123 @@
+// Versionamento automático dos plugins Dunky, sem releases do GitHub.
+//
+// Cada plugin aplica este arquivo logo depois de definir o version:
+//     apply from: '../DunkyUpdater/versionamento.gradle'
+//
+// A versão é calculada comparando os arquivos de src/main com os da última versão publicada, gravados no
+// repositório das jars (versoes/<Plugin>.properties). Quantos arquivos mudaram (novos, alterados ou apagados)
+// decide o tamanho do salto:
+//     1 a 7 arquivos   -> patch (1.4.2 -> 1.4.3)
+//     8 a 24 arquivos  -> minor (1.4.2 -> 1.5.0)
+//     25 ou mais       -> major (1.4.2 -> 2.0.0)
+// No fim da versão vai quantas vezes o plugin já foi atualizado: o DunkyTags na 1.5.2 depois de 400 atualizações
+// fica 1.5.2-400. O nome da jar não muda (DunkyTags.jar), a versão fica só no plugin.yml.
+// Sem nenhuma versão publicada, o plugin começa em 1.0.0-0. Buildar várias vezes sem publicar não sobe a versão:
+// ela só muda de verdade quando a task publicarVersao grava a nova versão no repositório das jars.
+
+import java.security.MessageDigest
+
+def minorFiles = 8
+def majorFiles = 25
+
+// Clone do repositório das jars, ao lado da pasta java (D:/net.dunky/github/jars), ou -Pdunky.jars=<pasta>.
+def jarsDir = file(project.findProperty('dunky.jars') ?: new File(rootDir, '../../jars').canonicalPath)
+def stateFile = new File(jarsDir, "versoes/${project.name}.properties")
+def sourceDirs = project.findProperty('dunkySourceDirectories') ?: [file('src/main')]
+def extraFiles = project.findProperty('dunkyTrackedFiles') ?: []
+
+// Hash de cada arquivo de src/main. Quebras de linha do Windows e do Linux contam igual.
+def hashes = new TreeMap<String, String>()
+sourceDirs.each { File sourceDir ->
+if (sourceDir.isDirectory()) {
+    sourceDir.eachFileRecurse(groovy.io.FileType.FILES) { File source ->
+        byte[] bytes = source.bytes
+        def text = new ByteArrayOutputStream(bytes.length)
+        for (byte value : bytes) {
+            if (value != (byte) 13) {
+                text.write(value)
+            }
+        }
+        def digest = MessageDigest.getInstance('SHA-1').digest(text.toByteArray())
+        hashes[(project.hasProperty('dunkySourceDirectories') ? projectDir.toPath() : sourceDir.toPath()).relativize(source.toPath()).toString().replace('\\', '/')] = digest.encodeHex().toString()
+    }
+}
+}
+extraFiles.each { File source ->
+    if (source.isFile()) {
+        hashes[projectDir.toPath().relativize(source.toPath()).toString().replace('\\', '/')] =
+                MessageDigest.getInstance('SHA-1').digest(source.getText('UTF-8').replace('\r', '').getBytes('UTF-8')).encodeHex().toString()
+    }
+}
+
+def state = new Properties()
+if (stateFile.isFile()) {
+    stateFile.withInputStream { state.load(it) }
+}
+def published = state.getProperty('versao')
+
+// Arquivos novos, alterados ou apagados desde a última versão publicada.
+def changed = 0
+hashes.each { path, hash ->
+    if (state.getProperty('arquivo.' + path) != hash) {
+        changed++
+    }
+}
+state.stringPropertyNames().findAll { it.startsWith('arquivo.') }.each {
+    if (!hashes.containsKey(it.substring('arquivo.'.length()))) {
+        changed++
+    }
+}
+
+// Quantas vezes o plugin já foi atualizado: vai no fim da versão (1.5.2-400).
+def updatesText = state.getProperty('atualizacoes', '0')
+def updates = updatesText.isInteger() ? updatesText.toInteger() : 0
+def nextUpdates = updates
+def next
+if (published == null) {
+    next = '1.0.0'
+    nextUpdates = 0
+} else if (changed == 0) {
+    next = published
+} else {
+    nextUpdates = updates + 1
+    def parts = (published.tokenize('.') + ['0', '0', '0']).take(3).collect { it.isInteger() ? it.toInteger() : 0 }
+    if (changed >= majorFiles) {
+        next = "${parts[0] + 1}.0.0"
+    } else if (changed >= minorFiles) {
+        next = "${parts[0]}.${parts[1] + 1}.0"
+    } else {
+        next = "${parts[0]}.${parts[1]}.${parts[2] + 1}"
+    }
+}
+project.version = "${next}-${nextUpdates}".toString()
+project.ext.dunkyVersaoPublicada = published == null ? null : "${published}-${updates}".toString()
+project.ext.dunkyArquivosAlterados = changed
+
+// Builda a jar com a versão nova, coloca no repositório das jars e grava a versão e os arquivos dela.
+// O publicar-jars.sh roda esta task em todos os plugins e depois faz o commit e o push.
+tasks.register('publicarVersao') {
+    group = 'dunky'
+    description = 'Publica a jar no repositório das jars com a versão calculada pelos arquivos alterados.'
+    def artifactTask = project.findProperty('dunkyArtifactTask') ?: (tasks.findByName('shadowJar') ?: tasks.getByName('jar'))
+    dependsOn artifactTask
+    doLast {
+        if (!new File(jarsDir, '.git').isDirectory()) {
+            throw new GradleException("Clone o repositório das jars em ${jarsDir} antes de publicar.")
+        }
+        File artifact = project.hasProperty('dunkyArtifactFile') ? project.property('dunkyArtifactFile') : artifactTask.archiveFile.get().asFile
+        File target = new File(jarsDir, artifact.name)
+        if (published != null && changed == 0 && target.isFile()) {
+            println "${project.name}: nada mudou, continua ${project.version}"
+            return
+        }
+        target.bytes = artifact.bytes
+        stateFile.parentFile.mkdirs()
+        // Gravado em ordem, para o diff do repositório mostrar só os arquivos que mudaram.
+        stateFile.withWriter('UTF-8') { writer ->
+            writer.write("versao=${next}\n")
+            writer.write("atualizacoes=${nextUpdates}\n")
+            hashes.each { path, hash -> writer.write("arquivo.${path.replace(' ', '\\ ').replace(':', '\\:').replace('=', '\\=')}=${hash}\n") }
+        }
+        println "${project.name}: ${project.ext.dunkyVersaoPublicada ?: 'nova'} -> ${project.version} (${changed} arquivo(s) alterado(s))"
+    }
+}
