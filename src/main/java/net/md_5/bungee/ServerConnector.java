@@ -107,6 +107,10 @@ public class ServerConnector extends PacketHandler
         channel.setVersion( user.getPendingConnection().getVersion() );
         this.ch = channel;
 
+        // Abort pending logins immediately when the frontend closes.
+        net.md_5.bungee.netty.ClientBackendLink.attach(user.getCh().getHandle(), channel.getHandle(), () -> obsolete = true);
+        if (!channel.getHandle().isActive()) return;
+
         this.handshakeHandler = new ForgeServerHandler( user, ch, target );
         Handshake originalHandshake = user.getPendingConnection().getHandshake();
         Handshake copiedHandshake = new Handshake( originalHandshake.getProtocolVersion(), originalHandshake.getHost(), originalHandshake.getPort(), 2 );
