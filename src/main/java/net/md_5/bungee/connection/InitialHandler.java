@@ -193,6 +193,11 @@ public class InitialHandler extends PacketHandler implements PendingConnection
     {
         if ( packet.packet == null )
         {
+            if ( net.md_5.bungee.util.HttpProbe.matches( packet.buf ) )
+            {
+                ch.close();
+                return;
+            }
             throw new QuietException( "Unexpected packet received during login process! " + BufUtil.dump( packet.buf, 16 ) );
         }
     }
