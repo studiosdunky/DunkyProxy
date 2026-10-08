@@ -508,11 +508,8 @@ public class BungeeCord extends ProxyServer
         }
 
         getLogger().info( "Thank you and goodbye" );
-        // Need to close loggers after last message!
-        for ( Handler handler : getLogger().getHandlers() )
-        {
-            handler.close();
-        }
+        // Drain queued messages before the dispatcher closes its handlers.
+        ((BungeeLogger) getLogger()).shutdown();
 
         // Unlock the thread before optionally calling system exit, which might invoke this function again.
         // If that happens, the system will obtain the lock, and then see that isRunning == false and return without doing anything.

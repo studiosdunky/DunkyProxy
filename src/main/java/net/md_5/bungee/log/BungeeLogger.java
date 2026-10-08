@@ -44,6 +44,28 @@ public class BungeeLogger extends Logger
         dispatcher.queue( record );
     }
 
+    public void shutdown()
+    {
+        dispatcher.shutdown();
+        if (Thread.currentThread() == dispatcher) return;
+        boolean interrupted = false;
+        while (dispatcher.isAlive())
+        {
+            try { dispatcher.join(); }
+            catch (InterruptedException ex) { interrupted = true; }
+        }
+        if (interrupted) Thread.currentThread().interrupt();
+    }
+
+    void closeHandlers()
+    {
+        for (java.util.logging.Handler handler : getHandlers())
+        {
+            removeHandler(handler);
+            handler.close();
+        }
+    }
+
     void doLog(LogRecord record)
     {
         super.log( record );

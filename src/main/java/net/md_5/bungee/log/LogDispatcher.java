@@ -2,47 +2,51 @@ package net.md_5.bungee.log;
 
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.logging.Level;
 import java.util.logging.LogRecord;
 
 public class LogDispatcher extends Thread
 {
-
+    private static final LogRecord STOP = new LogRecord(Level.OFF, "shutdown");
     private final BungeeLogger logger;
     private final BlockingQueue<LogRecord> queue = new LinkedBlockingQueue<>();
+    private boolean accepting = true;
 
     public LogDispatcher(BungeeLogger logger)
     {
-        super( "BungeeCord Logger Thread" );
+        super("BungeeCord Logger Thread");
         this.logger = logger;
     }
 
     @Override
     public void run()
     {
-        while ( !isInterrupted() )
+        try
         {
-            LogRecord record;
-            try
+            while (true)
             {
-                record = queue.take();
-            } catch ( InterruptedException ex )
-            {
-                continue;
+                LogRecord record = queue.take();
+                if (record == STOP) return;
+                logger.doLog(record);
             }
-
-            logger.doLog( record );
-        }
-        for ( LogRecord record : queue )
+        } catch (InterruptedException interrupted)
         {
-            logger.doLog( record );
+            Thread.currentThread().interrupt();
+        } finally
+        {
+            logger.closeHandlers();
         }
     }
 
-    public void queue(LogRecord record)
+    public synchronized void queue(LogRecord record)
     {
-        if ( !isInterrupted() )
-        {
-            queue.add( record );
-        }
+        if (accepting) queue.add(record);
+    }
+
+    public synchronized void shutdown()
+    {
+        if (!accepting) return;
+        accepting = false;
+        queue.add(STOP);
     }
 }
