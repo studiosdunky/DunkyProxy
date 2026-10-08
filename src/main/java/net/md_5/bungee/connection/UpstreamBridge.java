@@ -48,6 +48,7 @@ public class UpstreamBridge extends PacketHandler
 
     private final ProxyServer bungee;
     private final UserConnection con;
+    private long backpressureStarted;
 
     public UpstreamBridge(ProxyServer bungee, UserConnection con)
     {
@@ -102,9 +103,24 @@ public class UpstreamBridge extends PacketHandler
             if ( channel.getHandle().isWritable() )
             {
                 server.config().setAutoRead( true );
+                if ( backpressureStarted != 0 )
+                {
+                    long millis = java.util.concurrent.TimeUnit.NANOSECONDS.toMillis( System.nanoTime() - backpressureStarted );
+                    if ( millis >= 1000 ) bungee.getLogger().info( "Network queue recovered: player=" + con.getName() + ", duration=" + millis + "ms" );
+                    backpressureStarted = 0;
+                }
             } else
             {
                 server.config().setAutoRead( false );
+                final long started = backpressureStarted = System.nanoTime();
+                channel.getHandle().eventLoop().schedule( () -> {
+                    if ( backpressureStarted != started || !channel.getHandle().isActive() || channel.getHandle().isWritable() ) return;
+                    io.netty.channel.ChannelOutboundBuffer buffer = channel.getHandle().unsafe().outboundBuffer();
+                    bungee.getLogger().warning( "Network queue blocked: player=" + con.getName()
+                            + ", protocol=" + con.getPendingConnection().getVersion()
+                            + ", queuedBytes=" + ( buffer == null ? 0 : buffer.totalPendingWriteBytes() )
+                            + ", ping=" + con.getPing() + "ms" );
+                }, 1, java.util.concurrent.TimeUnit.SECONDS );
             }
         }
     }
