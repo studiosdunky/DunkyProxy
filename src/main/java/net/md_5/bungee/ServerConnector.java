@@ -443,7 +443,12 @@ public class ServerConnector extends PacketHandler
             throw CancelSendSignal.INSTANCE;
         }
 
-        String message = bungee.getTranslation( "connect_kick", target.getName(), event.getKickReason() );
+        String reason = event.getKickReason();
+        if ( reason != null && reason.toLowerCase( Locale.ROOT ).contains( "connection throttled" ) )
+        {
+            reason = bungee.getTranslation( "server_connection_throttled" );
+        }
+        String message = bungee.getTranslation( "connect_kick", target.getName(), reason );
         if ( user.isDimensionChange() )
         {
             user.disconnect( message );
