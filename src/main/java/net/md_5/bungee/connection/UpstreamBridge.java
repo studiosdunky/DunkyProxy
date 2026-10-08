@@ -60,6 +60,20 @@ public class UpstreamBridge extends PacketHandler
     @Override
     public void exception(Throwable t) throws Exception
     {
+        if ( t instanceof io.netty.handler.timeout.WriteTimeoutException || t instanceof io.netty.handler.timeout.ReadTimeoutException )
+        {
+            Channel client = con.getCh().getHandle();
+            io.netty.channel.ChannelOutboundBuffer buffer = client.unsafe().outboundBuffer();
+            ServerConnection server = con.getServer();
+            KeepAliveData pending = server == null ? null : server.getKeepAlives().peek();
+            bungee.getLogger().log( java.util.logging.Level.WARNING,
+                    "Connection diagnostics: player={0}, protocol={1}, server={2}, ping={3}ms, queuedWriteBytes={4}, writable={5}, backendAutoRead={6}, pendingKeepAliveAge={7}ms",
+                    new Object[]{con.getName(), con.getPendingConnection().getVersion(),
+                        server == null ? "none" : server.getInfo().getName(), con.getPing(),
+                        buffer == null ? 0L : buffer.totalPendingWriteBytes(), client.isWritable(),
+                        server == null ? "none" : server.getCh().getHandle().config().isAutoRead(),
+                        pending == null ? -1L : System.currentTimeMillis() - pending.getTime()});
+        }
         // DunkyProxy: o jogador vê a mensagem do messages.properties, não a exceção.
         con.disconnect( net.md_5.bungee.BungeeCord.getInstance().getTranslation( "connection_error_kick" ) );
     }
