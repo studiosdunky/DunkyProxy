@@ -1,6 +1,5 @@
 package net.md_5.bungee.connection;
 
-import com.google.common.base.Preconditions;
 import com.mojang.brigadier.context.StringRange;
 import com.mojang.brigadier.suggestion.Suggestion;
 import com.mojang.brigadier.suggestion.Suggestions;
@@ -131,11 +130,10 @@ public class UpstreamBridge extends PacketHandler
     @Override
     public void handle(KeepAlive alive) throws Exception
     {
-        KeepAliveData keepAliveData = con.getServer().getKeepAlives().peek();
+        KeepAliveData keepAliveData = net.md_5.bungee.ServerConnection.acknowledgeKeepAlive( con.getServer().getKeepAlives(), alive.getRandomId() );
 
-        if ( keepAliveData != null && alive.getRandomId() == keepAliveData.getId() )
+        if ( keepAliveData != null )
         {
-            Preconditions.checkState( keepAliveData == con.getServer().getKeepAlives().poll(), "keepalive queue mismatch" );
             int newPing = (int) ( System.currentTimeMillis() - keepAliveData.getTime() );
             con.getTabListHandler().onPingChange( newPing );
             con.setPing( newPing );

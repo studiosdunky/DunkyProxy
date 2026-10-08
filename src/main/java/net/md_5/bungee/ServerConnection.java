@@ -146,6 +146,28 @@ public class ServerConnection implements Server
         return unsafe;
     }
 
+    /** A valid later reply supersedes unanswered older challenges; unknown replies change nothing. */
+    public static KeepAliveData acknowledgeKeepAlive(Queue<KeepAliveData> pending, long id)
+    {
+        KeepAliveData match = null;
+        for ( KeepAliveData data : pending )
+        {
+            if ( data.getId() == id )
+            {
+                match = data;
+                break;
+            }
+        }
+        if ( match != null )
+        {
+            while ( pending.poll() != match )
+            {
+                // Discard only the older unanswered challenges preceding this valid reply.
+            }
+        }
+        return match;
+    }
+
     @Data
     public static class KeepAliveData
     {
